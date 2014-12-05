@@ -167,7 +167,7 @@ module RedBubble
   #
   #   > model = ModelHtmlUnit.new('Nikon', 'D7100')
   #   > model.filename
-  #   => "nikon_d7100.html"
+  #   => "model_nikon_d7100.html"
   # 
   #   > model.title
   #   => "Nikon | D7100"
@@ -232,6 +232,20 @@ module RedBubble
   end
 
 
+  #
+  # Contains data needed for rendering the html page 
+  # with all images captured by a specific camera make 
+  #
+  # It takes one argument of type String:
+  #   Example:
+  #
+  #   > model = ModelHtmlUnit.new('Nikon')
+  #   > model.filename
+  #   => "make_nikon.html"
+  # 
+  #   > model.title
+  #   => "Nikon"
+  #
   class MakeHtmlUnit < Struct.new :make
     include HtmlUnit
 
@@ -243,20 +257,45 @@ module RedBubble
       make
     end
 
+    #
+    # It will return the array containing Link objects
+    # which are used for rendering the navigation per each html make page.
+    # 
+    # First Link object is the link to the Index page containing all makes.
+    # The remaining Link objects are the links to the model pages containing
+    # all the images or the given make and the respective model.
+    #
     def navigation
       [IndexHtmlUnit.new.link] + ModelHtmlUnitCollection.links_by_make(make)
     end
 
+    #
+    # It will return the array containing first [n] Image objects of the give make
+    # which are used for rendering the thumbnails along with the actual links
+    # leading to the full-sized image, per each html make page.
+    # 
     def thumbnails
       ImageCollection.by_make_top(make, 10)
     end
 
+    #
+    # Fetch all model under the given make.
+    #
     def models
       ModelHtmlUnitCollection.by_make(make)
     end
   end
 
 
+  #
+  # MakeHtmlUnitCollection object holds all the MakeHtmlUnit instances.
+  # It provides a method for fetching all the links to the each MakeHtmlUnit.
+  # It's used to fetch links to all the distinct camera make html pages 
+  # accessible via navigation located on the Index page.
+  #
+  # It also provides a method for fetching link to the specific make page.
+  # Make is passed as an argument.
+  #
   class MakeHtmlUnitCollection
     @units = []
 
@@ -267,8 +306,14 @@ module RedBubble
         units.uniq.map { |unit| Link.new(unit.title, unit.filename) }
       end
 
+      #
+      # Tapping into the result of the find method.
+      # It will be nil if the make can't be found so raise and Exception
+      # since we can't work without the unit.
+      #
       def link_by_make(make)
         (units.find { |unit| unit.make == make }).tap do |unit|
+          raise(StandardError, 'Make not found.') if unit.nil?
           Link.new(unit.title, unit.filename)
         end
       end
@@ -344,7 +389,6 @@ module RedBubble
     end
 
     private
-
       #
       # Tapping into the result of the find method.
       # It will be nil if the key is missing so raise and Exception
@@ -358,17 +402,17 @@ module RedBubble
   end
 
 
+  #
+  # Image object holds the basic image details extracted from EXIF info
+  # needed to properly handle it on Make and Model pages.
+  # 
+  # It provides `url` method to fetch the URLs for all image sizes,
+  # which is later used for rendering thumbnails and links to the
+  # full-sized images.
+  #
   class Image < Struct.new :work
     def filename
       @filename ||= work['filename']['$']
-    end
-
-    def image_width
-      @image_width ||= work['image_width']['$']
-    end
-
-    def image_height
-      @image_height ||= work['image_height']['$']
     end
 
     def make
