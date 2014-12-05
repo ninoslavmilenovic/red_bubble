@@ -101,6 +101,10 @@ module RedBubble
         end
       end
 
+      #
+      # @unit instance variable is re-assigned 
+      # each time the method is being invoked.
+      #
       def save_html_file(context, unit)
         @unit = unit
         File.open(output_file(unit), 'w') do |file| 
@@ -120,6 +124,11 @@ module RedBubble
         @works ||= hash['works']['work']
       end
 
+      #
+      # Xml is being converted/mapped to Hash for the purpose of having the flexibility
+      # of enabling multiple input file types by simply swapping the mapping engine on the later stage
+      # without having to update other parts of the code, as Hash is the native data structure.
+      #
       def hash 
         @hash ||= CobraVsMongoose.xml_to_hash(file_content)
       end
@@ -130,13 +139,34 @@ module RedBubble
   end
 
 
+  #
+  # Factored-out module for sharing the method with all HtmlUnit objects.
+  #
   module HtmlUnit 
+    #
+    # Shaping the unit name into the format applicable for filenames.
+    #
     def generate_filename(base)
       "#{base}.html".downcase.gsub(' ', '_').gsub(/[^a-z0-9\_\.]/, '')
     end 
   end
 
 
+  #
+  # Contains data needed for rendering the html page 
+  # with all images captured by a specific camera make 
+  # and a specific camera model in the give make range.
+  #
+  # It takes two arguments of type String:
+  #   Example:
+  #
+  #   > model = ModelHtmlUnit.new('Nikon', 'D7100')
+  #   > model.filename
+  #   => "nikon_d7100.html"
+  # 
+  #   > model.title
+  #   => "Nikon | D7100"
+  #
   class ModelHtmlUnit < Struct.new :make, :model
     include HtmlUnit
 
@@ -148,16 +178,38 @@ module RedBubble
       "#{make} | #{model}"
     end
 
+    #
+    # It will return the array containing Link objects
+    # which are used for rendering the navigation per each html model page.
+    # 
+    # First Link object is the link to the Index page containing all makes.
+    # Second Link object is the link to the parent make page containing
+    # all the camera models for that particular make.
+    #
     def navigation
       [IndexHtmlUnit.new.link, MakeHtmlUnitCollection.link_by_make(make)]
     end
 
+    #
+    # It will return the array containing Image objects
+    # which are used for rendering the thumbnails along with the actual links
+    # leading to the full-sized image, per each html model page.
+    # 
     def thumbnails
       ImageCollection.by_make_model(make, model)
     end
   end
 
 
+  #
+  # ModelHtmlUnitCollection object holds all the ModelHtmlUnit instances.
+  # It provides a method for fetching all the links to the each ModelHtmlUnit.
+  # It's used to fetch links to all the distinct camera model html pages 
+  # accessible via navigation located on each make page.
+  #
+  # It also provides a method for fetching all camera models 
+  # per specific make, where make is passed as an argument.
+  #
   class ModelHtmlUnitCollection
     @units = []
 
@@ -211,8 +263,9 @@ module RedBubble
       end
 
       def link_by_make(make)
-        unit = units.find { |unit| unit.make == make }
-        Link.new(unit.title, unit.filename)
+        (units.find { |unit| unit.make == make }).tap do |unit|
+          Link.new(unit.title, unit.filename)
+        end
       end
     end
   end
@@ -287,6 +340,11 @@ module RedBubble
 
     private
 
+      #
+      # Tapping into the result of the find method.
+      # It will be nil if the key is missing so raise and Exception
+      # since we can't work without the URL.
+      #
       def by_type(type)
         (types['url'].find { |url| url['@type'] == type }).tap do |url|
           raise(StandardError, 'URL details are missing.') if url.nil?
@@ -345,12 +403,10 @@ module RedBubble
     # as well as methods for fetching make names for the purpose of
     # constructing navigation links.
     #
-
     @images = []
 
     class << self
       attr_accessor :images
-
       #
       # Fetch first [n] objects in the collection.
       #
