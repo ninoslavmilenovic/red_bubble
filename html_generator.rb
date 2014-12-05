@@ -3,7 +3,10 @@
 
 # RedBubble::HtmlGenerator: Batch processor
 #
-#  Usage:  ruby html_generator.rb  [input_file_path, output_destination_path]
+#  Usage:   ruby html_generator.rb  [input_file_path, output_destination_path]
+#
+#  Author:  Nino Milenovic <coffee@rubyengineer.com>
+#  Date:    December 5th 2014
 #
 
 require 'cobravsmongoose'
