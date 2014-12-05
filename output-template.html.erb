@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title><%= @unit.title %></title>
+  <style type="text/css">
+    nav {
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><%= @unit.title %></h1>
+
+    <nav>
+      <ul>
+        <% @unit.navigation.each do |nav| %>
+          <li><a href="<%= nav.filename %>"><%= nav.title %></a></li>
+        <% end %>
+      </ul>
+    </nav>
+  </header>
+
+  <% @unit.thumbnails.each do |thumb| %>
+    <a href="<%= thumb.url.large %>" target="_blank"><img src="<%= thumb.url.small %>" alt="<%= thumb.filename %>" /></a>
+  <% end %>
+</body>
+</html>
