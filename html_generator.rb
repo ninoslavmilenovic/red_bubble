@@ -1,15 +1,56 @@
 # encoding: utf-8
+# html_generator.rb
 
-require 'pry'
-require 'nokogiri'
+require 'cobravsmongoose'
 require 'tilt/erb'
+
 
 module RedBubble
   VERSION = '0.1'
 
   class HtmlGenerator
+    #
+    # HtmlGenerator is a batch processor which uses EXIF data
+    # exported from a selection of images and generates a set of static HTML files
+    # to allow a user to browse these images.
+    #
+    # This script should be run from the command line and it should take two arguments:
+    #   - Path to the input *.xml file containing EXIF data structured like the works.xml file
+    #     provided with this script.
+    #   - Path to the output directory where static HTML files will be saved.
+    # These paths can be both relative and absolute.
+    #
+    # Example:
+    #   $ ruby html_generator.rb <input_file_path> <output_directory_path>
+    # 
+    #   $ ruby html_generator.rb works.xml static_html/
+    #
+    # How does it work:
+    # 
+    # On HtmlGenerator instance initialization, 
+    # *.xml file is parsed and converted to Hash since it's a native Ruby data type
+    # so it will allow for the input file type to be easily changed from *.xml
+    # to anything else by simply swapping the mapper. 
+    #
+    # By looping through this Hash
+    # Image objects are generated for each `work` and appended to the ImageCollection.
+    # 
+    # In the next step, three types of HtmlUnit objects are used 
+    # to generate distinct types of static html data objects [Index, Makes, Models],
+    # which are then appended to their respective collections.
+    #
+    # Last step is taking all these pre-generated object collections
+    # and rendering a distinct static html pages using the one provided html template file.
+    #
+    # Each page has it's respective title, navigation and thumbnail images 
+    # which are linked with their respective full time images.
+    #
     attr_accessor :file_path, :output_path
 
+    #
+    # Remember to update the constant in case the 'output-template.html.erb' template 
+    # is not located in the same directory as this script.
+    #
     TEMPLATE_PATH = File.expand_path(File.join(File.dirname(__FILE__), 'output-template.html.erb'))
 
     def initialize(input_file_path, output_dir_path)
@@ -17,39 +58,32 @@ module RedBubble
       self.output_path  = output_dir_path
 
       generate_image_collection!
-      generate_makes!
-      generate_index_html!
     end
 
     private
 
+      def generate_image_collection!
+        ImageCollection.tap do |bundle|
+          works.each { |work| bundle.images << Image.new(work) }
+        end
+        generate_makes!
+      end
+
       def generate_index_html!
         generate_make_htmls!
-        @unit = IndexHtmlUnit.new
-        html = html_template.render(self)
-        File.open(output_file(@unit), 'w') { |file| file.write(html) }
+        save_html_file(self, IndexHtmlUnit.new)
       end
 
       def generate_make_htmls!
         MakeHtmlUnitCollection.units.each do |unit|
           generate_model_htmls!(unit.make)
-          @unit = unit
-          html = html_template.render(self)
-          File.open(output_file(@unit), 'w') { |file| file.write(html) }
+          save_html_file(self, unit)
         end
       end
 
       def generate_model_htmls!(make)
         ModelHtmlUnitCollection.by_make(make).each do |unit|
-          @unit = unit
-          html = html_template.render(self)
-          File.open(output_file(@unit), 'w') { |file| file.write(html) }
-        end
-      end
-
-      def generate_image_collection!
-        ImageCollection.tap do |bundle|
-          works.each { |work| bundle.images << Image.new(work) }
+          save_html_file(self, unit)
         end
       end
 
@@ -58,11 +92,19 @@ module RedBubble
           generate_models_by_make!(make)
           MakeHtmlUnitCollection.units << MakeHtmlUnit.new(make)
         end
+        generate_index_html!
       end
 
       def generate_models_by_make!(make)
         ImageCollection.all_models_by_make(make).each do |model|
           ModelHtmlUnitCollection.units << ModelHtmlUnit.new(make, model)
+        end
+      end
+
+      def save_html_file(context, unit)
+        @unit = unit
+        File.open(output_file(unit), 'w') do |file| 
+          file.write(html_template.render(context))
         end
       end
 
@@ -75,22 +117,31 @@ module RedBubble
       end
 
       def works
-        @works ||= document.xpath('//work')
+        @works ||= hash['works']['work']
       end
 
-      def document 
-        @xml_doc ||= Nokogiri::XML(file)
+      def hash 
+        @hash ||= CobraVsMongoose.xml_to_hash(file_content)
       end
 
-      def file
-        @file ||= File.open(file_path)
+      def file_content
+        @file_content ||= File.read(file_path)
       end
   end
 
 
+  module HtmlUnit 
+    def generate_filename(base)
+      "#{base}.html".downcase.gsub(' ', '_').gsub(/[^a-z0-9\_\.]/, '')
+    end 
+  end
+
+
   class ModelHtmlUnit < Struct.new :make, :model
+    include HtmlUnit
+
     def filename
-      "model_#{make}_#{model}.html".downcase.gsub(' ', '_').gsub(/[^a-z0-9\_\.]/, '')
+      generate_filename("model_#{make}_#{model}")
     end
 
     def title
@@ -125,8 +176,10 @@ module RedBubble
 
 
   class MakeHtmlUnit < Struct.new :make
+    include HtmlUnit
+
     def filename
-      "make_#{make}.html".downcase.gsub(' ', '_').gsub(/[^a-z0-9\_\.]/, '')
+      generate_filename("make_#{make}")
     end
 
     def title
@@ -167,11 +220,11 @@ module RedBubble
 
   class IndexHtmlUnit
     def filename
-      "index.html"
+      'index.html'
     end
 
     def title
-      "Index"
+      'Index'
     end
 
     def navigation
@@ -192,53 +245,94 @@ module RedBubble
   end
 
 
+  class URL
+    #
+    # URL object exists as a container of URLs of different sizes.
+    # It accepts a Hash with the following structure:
+    #
+    #   { "url" => [
+    #       {"@type" => "small",  "$" => "http://<...>s.jpg" },
+    #       {"@type" => "medium", "$" => "http://<...>m.jpg" },
+    #       {"@type" => "large",  "$" => "http://<...>l.jpg" }
+    #     ]
+    #   }
+    #
+    # Example:
+    #
+    #   > url = URL.new({"url" => [...]})
+    #   > url.small
+    #   => "http://<...>s.jpg"
+    #
+    attr_accessor :types
+
+    def initialize(types)
+      raise(ArgumentError, 'Invalid Type. Hash expected.') unless types.kind_of?(Hash)
+      raise(StandardError, 'Hash is mising `url` key.') unless types.key?('url')
+      raise(StandardError, '`url` key should containt an array.') unless types['url'].kind_of?(Array)
+
+      self.types = types
+    end
+
+    def small
+      url = types['url'].find { |url| url['@type'] == 'small' }
+      raise(StandardError, 'URL details are missing.') if url.nil?
+      @small ||= url['$']
+    end
+
+    def medium
+      url = types['url'].find { |url| url['@type'] == 'medium' }
+      raise(StandardError, 'URL details are missing.') if url.nil?
+      @medium ||= url['$']
+    end
+
+    def large
+      url = types['url'].find { |url| url['@type'] == 'large' }
+      raise(StandardError, 'URL details are missing.') if url.nil?
+      @large ||= url['$']
+    end
+  end
+
+
   class Image < Struct.new :work
     def filename
-      @filename ||= work.css('filename').text
+      @filename ||=  work['filename']['$']
     end
 
     def image_width
-      @image_width ||= work.css('image_width').text
+      @image_width ||= work['image_width']['$']
     end
 
     def image_height
-      @image_height ||= work.css('image_height').text
+      @image_height ||= work['image_height']['$']
     end
 
     def make
-      text = exif.css('make').text
-      @make ||= text.empty? ? 'Unnknown Make' : text
+      if exif['make']
+        text = exif['make']['$']
+      @make ||= text.empty? ? 'Unknown Make' : text
+      else
+        'Unknown Make'
+      end
     end
 
     def model
-      text = exif.css('model').text
-      @model ||= text.empty? ? 'Unnknown Model' : text
+      if exif['model']
+      text = exif['model']['$']
+      @model ||= text.empty? ? 'Unknown Model' : text
+    else
+      'Missing Model'
+    end
     end
 
     def url
-      @url ||= URL.new(work.css('urls'))
+      @url ||= URL.new(work['urls'])
     end
 
     private
 
       def exif
-        @exif ||= work.css('exif')
+        @exif ||= work['exif']
       end
-  end
-
-
-  class URL < Struct.new :types
-    def small
-      @small ||= types.css('url[@type="small"]').first.text
-    end
-
-    def medium
-      @medium ||= types.css('url[@type="medium"]').first.text
-    end
-
-    def large
-      @large ||= types.css('url[@type="large"]').first.text
-    end
   end
 
 
