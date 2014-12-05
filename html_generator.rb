@@ -274,28 +274,31 @@ module RedBubble
     end
 
     def small
-      url = types['url'].find { |url| url['@type'] == 'small' }
-      raise(StandardError, 'URL details are missing.') if url.nil?
-      @small ||= url['$']
+      raise(StandardError, 'URL details are missing.') if by_type('small').nil?
+      @small ||= by_type('small')['$']
     end
 
     def medium
-      url = types['url'].find { |url| url['@type'] == 'medium' }
-      raise(StandardError, 'URL details are missing.') if url.nil?
-      @medium ||= url['$']
+      raise(StandardError, 'URL details are missing.') if by_type('medium').nil?
+      @small ||= by_type('medium')['$']
     end
 
     def large
-      url = types['url'].find { |url| url['@type'] == 'large' }
-      raise(StandardError, 'URL details are missing.') if url.nil?
-      @large ||= url['$']
+      raise(StandardError, 'URL details are missing.') if by_type('large').nil?
+      @small ||= by_type('large')['$']
     end
+
+    private
+
+      def by_type(type)
+        types['url'].find { |url| url['@type'] == type }
+      end
   end
 
 
   class Image < Struct.new :work
     def filename
-      @filename ||=  work['filename']['$']
+      @filename ||= work['filename']['$']
     end
 
     def image_width
@@ -309,7 +312,7 @@ module RedBubble
     def make
       if exif['make']
         text = exif['make']['$']
-      @make ||= text.empty? ? 'Unknown Make' : text
+        @make ||= text.empty? ? 'Unknown Make' : text
       else
         'Unknown Make'
       end
@@ -317,11 +320,11 @@ module RedBubble
 
     def model
       if exif['model']
-      text = exif['model']['$']
-      @model ||= text.empty? ? 'Unknown Model' : text
-    else
-      'Missing Model'
-    end
+        text = exif['model']['$']
+        @model ||= text.empty? ? 'Unknown Model' : text
+      else
+        'Missing Model'
+      end
     end
 
     def url
@@ -337,31 +340,75 @@ module RedBubble
 
 
   class ImageCollection
+    #
+    # It groups all Image objects and provides methods
+    # for fetching by image details such as make and model,
+    # as well as methods for fetching make names for the purpose of
+    # constructing navigation links.
+    #
+
     @images = []
 
     class << self
       attr_accessor :images
 
+      #
+      # Fetch first [n] objects in the collection.
+      #
       def get_any_top(number)
         images.take(number)
       end
 
+      #
+      # Fetch all objects belonging to a certain make.
+      # For example, all images captured by Nikon camera.
+      #
       def by_make(make)
         images.select { |image| image.make == make }
       end
 
+      #
+      # Fetch first [n] objects belonging to a certain make.
+      # For example, first 10 images captured by Nikon camera.
+      #
+      #   > ImageCollection.by_make_top('Nikon', 10)
+      #
       def by_make_top(make, number)
         by_make(make).take(number)
       end
 
+      #
+      # Fetch all objects belonging to a certain make 
+      # and one of their camera models.
+      # For example, all images captured by Nikon camera,
+      # more specifically, Nikon D7100.
+      #
+      # Example:
+      #   > ImageCollection.by_make_model('Nikon', 'Nikon D7100')
+      #
       def by_make_model(make, model)
         by_make(make).select { |image| image.model == model }
       end
 
+      #
+      # Fetch all make names. It returns an Array of Strings.
+      #
+      # Example:
+      #   > ImageCollection.all_makes
+      #   => ["Nikon", "Canon", "Olympus", "Pentax",...]
+      #
       def all_makes
         images.map(&:make)
       end
 
+      #
+      # Fetch all camera model names belonging to a specific camera make. 
+      # It returns an Array of Strings.
+      #
+      # Example:
+      #   > ImageCollection.all_models_by_make('Nikon')
+      #   => ["Nikon D3100", "Nikon D5100", "Nikon D7100", "Nikon D3",...]
+      #
       def all_models_by_make(make)
         by_make(make).map(&:model)
       end
