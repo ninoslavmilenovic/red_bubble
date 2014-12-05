@@ -411,6 +411,8 @@ module RedBubble
   # full-sized images.
   #
   class Image < Struct.new :work
+      UNKNOWN = 'Unknown'
+
     def filename
       @filename ||= work['filename']['$']
     end
@@ -418,18 +420,18 @@ module RedBubble
     def make
       if exif['make']
         text = exif['make']['$']
-        @make ||= text.empty? ? 'Unknown Make' : text
+        @make ||= text.empty? ? UNKNOWN : text
       else
-        'Unknown Make'
+        UNKNOWN
       end
     end
 
     def model
       if exif['model']
         text = exif['model']['$']
-        @model ||= text.empty? ? 'Unknown Model' : text
+        @model ||= text.empty? ? UNKNOWN : text
       else
-        'Missing Model'
+        UNKNOWN
       end
     end
 
