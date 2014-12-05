@@ -1,6 +1,11 @@
 # encoding: utf-8
 # html_generator.rb
 
+# RedBubble::HtmlGenerator: Batch processor
+#
+#  Usage:  ruby html_generator.rb  [input_file_path, output_destination_path]
+#
+
 require 'cobravsmongoose'
 require 'tilt/erb'
 
@@ -140,7 +145,7 @@ module RedBubble
 
 
   #
-  # Factored-out module for sharing the method with all HtmlUnit objects.
+  # Factored-out module for sharing the method with all HtmlUnit* objects.
   #
   module HtmlUnit 
     #
@@ -473,5 +478,13 @@ end
 
 
 if __FILE__ == $0
-  RedBubble::HtmlGenerator.new(File.absolute_path(ARGV[0]), File.absolute_path(ARGV[1]))
+  raise(ArgumentError, 'Missing arguments.') if ARGV.size < 2
+  
+  input_file_path       = File.absolute_path(ARGV[0])
+  output_directory_path = File.absolute_path(ARGV[1])
+
+  raise(ArgumentError, 'File does not exists.') unless File.exist?(input_file_path)
+  raise(ArgumentError, 'Output directory does not exists.') unless File.directory?(output_directory_path)
+    
+  RedBubble::HtmlGenerator.new(input_file_path, output_directory_path)
 end
