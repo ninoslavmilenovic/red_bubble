@@ -274,24 +274,23 @@ module RedBubble
     end
 
     def small
-      raise(StandardError, 'URL details are missing.') if by_type('small').nil?
-      @small ||= by_type('small')['$']
+      @small ||= by_type('small')
     end
 
     def medium
-      raise(StandardError, 'URL details are missing.') if by_type('medium').nil?
-      @small ||= by_type('medium')['$']
+      @medium ||= by_type('medium')
     end
 
     def large
-      raise(StandardError, 'URL details are missing.') if by_type('large').nil?
-      @small ||= by_type('large')['$']
+      @large ||= by_type('large')
     end
 
     private
 
       def by_type(type)
-        types['url'].find { |url| url['@type'] == type }
+        (types['url'].find { |url| url['@type'] == type }).tap do |url|
+          raise(StandardError, 'URL details are missing.') if url.nil?
+        end['$']
       end
   end
 
