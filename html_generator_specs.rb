@@ -433,4 +433,98 @@ describe RedBubble do
       end
     end
   end
+
+
+  describe RedBubble::IndexHtmlUnit do
+    describe '#filename' do
+      context 'when valid arguments' do
+        let(:index) { RedBubble::IndexHtmlUnit.new }
+
+        specify { expect(index.filename).to eq('index.html') }
+      end
+    end
+
+    describe '#title' do
+      context 'when valid arguments' do
+        let(:index) { RedBubble::IndexHtmlUnit.new }
+
+        specify { expect(index.title).to eq('Index') }
+      end
+    end
+
+    describe '#navigation' do
+      context 'when valid arguments' do
+        let!(:index) { RedBubble::IndexHtmlUnit.new }
+        let!(:make1) { RedBubble::MakeHtmlUnit.new 'NIKON CORPORATION' }
+        let!(:make2) { RedBubble::MakeHtmlUnit.new 'Canon' }
+        let!(:make_collection) { RedBubble::MakeHtmlUnitCollection }
+
+        before do 
+          make_collection.units << make1
+          make_collection.units << make2
+        end
+
+        specify do 
+          expect(index.navigation).to match_array([
+            RedBubble::Link.new(make1.title, make1.filename),
+            RedBubble::Link.new(make2.title, make2.filename)
+          ])
+        end
+
+        specify { expect(index.navigation[0].title).to eq(make1.title) }
+        specify { expect(index.navigation[0].filename).to eq(make1.filename) }
+        specify { expect(index.navigation[1].title).to eq(make2.title) }
+        specify { expect(index.navigation[1].filename).to eq(make2.filename) }
+      end
+    end
+
+    describe '#thumbnails' do
+      context 'when valid arguments' do
+        let!(:index) { RedBubble::IndexHtmlUnit.new }
+        let!(:make1) { RedBubble::MakeHtmlUnit.new 'NIKON CORPORATION' }
+        let!(:make2) { RedBubble::MakeHtmlUnit.new 'Canon' }
+        let!(:make_collection) { RedBubble::MakeHtmlUnitCollection }
+
+        before do 
+          make_collection.units << make1
+          make_collection.units << make2
+        end
+
+        context 'when no images are present' do
+          specify do
+            expect(index.thumbnails).to match_array([])
+          end
+        end
+
+        context 'when images are present' do
+          let!(:work1) do
+            {
+              "filename"=>{"$"=>"1620421.jpg"}, 
+              "urls"=> {
+                "url"=>[
+                  {"@type"=>"small", "$"=>"http://ih1.redbubble.net/work.31820.1.flat,135x135,075,f.jpg"},
+                  {"@type"=>"medium", "$"=>"http://ih1.redbubble.net/work.31820.1.flat,300x300,075,f.jpg"},
+                  {"@type"=>"large", "$"=>"http://ih1.redbubble.net/work.31820.1.flat,550x550,075,f.jpg"}
+                ]
+              },
+              "exif"=> {
+                "model"=>{"$"=>"NIKON D80"},
+                "make"=>{"$"=>"NIKON CORPORATION"}
+              }
+            }
+          end
+          let!(:image1) { RedBubble::Image.new(work1) }
+          let!(:image_collection) { RedBubble::ImageCollection }
+
+          before { image_collection.images << image1 }
+          
+          specify do
+            expect(index.thumbnails).to match_array(RedBubble::ImageCollection.by_make_top(make1.make, 10))
+          end
+          specify { expect(index.thumbnails.size).to eq(1) }
+          specify { expect(index.thumbnails).to match_array([image1]) }
+        end
+      end
+    end
+  end
 end
